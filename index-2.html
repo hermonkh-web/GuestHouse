@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+    
+    <title>GuestHouse OS</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Library Export to Image & PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = { 
+            darkMode: 'media', 
+            theme: { extend: { fontFamily: { sans: ['"Plus Jakarta Sans"', 'sans-serif'] }, colors: { brand: { 50: '#f0fdf4', 500: '#22c55e', 600: '#16a34a', 900: '#14532d' } } } } 
+        }
+    </script>
+    <style>
+        body { -webkit-tap-highlight-color: transparent; }
+        
+        .glass-card { background: rgba(255, 255, 255, 0.95); border: 1px solid rgba(226, 232, 240, 0.8); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+        @media (prefers-color-scheme: dark) {
+            .glass-card { background: rgba(30, 41, 59, 0.95); border: 1px solid rgba(51, 65, 85, 0.8); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3); }
+        }
+
+        .skeleton { background: linear-gradient(90deg, #e2e8f0 25%, #cbd5e1 50%, #e2e8f0 75%); background-size: 200% 100%; animation: loading 1.5s infinite; }
+        @media (prefers-color-scheme: dark) { .skeleton { background: linear-gradient(90deg, #334155 25%, #475569 50%, #334155 75%); } }
+        @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        
+        #toast { transition: opacity 0.3s, transform 0.3s; transform: translateY(-20px); opacity: 0; pointer-events: none; }
+        #toast.show { transform: translateY(0); opacity: 1; pointer-events: auto; }
+        
+        input[type="date"], input[type="text"], input[type="password"] { 
+            appearance: none; -webkit-appearance: none; outline: none; font-family: inherit;
+        }
+        
+        #loginScreen { transition: opacity 0.4s; }
+        .fade-out { opacity: 0; pointer-events: none; }
+        .pin-input { letter-spacing: 0.5em; text-align: center; font-size: 1.5rem; }
+        
+        .modal-bg { transition: opacity 0.3s; }
+        .modal-content { transition: transform 0.3s; transform: scale(0.95); }
+        .modal-bg:not(.hidden) .modal-content { transform: scale(1); }
+
+        /* KELAS KHUSUS SAAT PROSES EXPORT PDF/JPEG */
+        .exporting .no-print { display: none !important; }
+        .exporting .action-buttons { display: none !important; }
+        .exporting .print-header { display: block !important; padding: 24px 32px 10px 32px; }
+        .exporting { background-color: #f8fafc !important; color: #1e293b !important; }
+        .exporting .glass-card { background: white !important; border: 1px solid #e2e8f0 !important; box-shadow: none !important; }
+        .exporting * { color: inherit; } 
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 antialiased min-h-screen flex flex-col pb-24 sm:pb-10 transition-colors duration-300">
+
+    <!-- LOGIN SCREEN -->
+    <div id="loginScreen" class="fixed inset-0 z-[200] bg-slate-900/90 backdrop-blur-sm flex flex-col items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl shadow-2xl p-8 flex flex-col items-center relative overflow-hidden border border-slate-200 dark:border-slate-700">
+            <div class="absolute top-0 left-0 w-full h-2 bg-brand-500"></div>
+            <div class="bg-brand-50 dark:bg-brand-900/30 p-4 rounded-full text-brand-600 dark:text-brand-400 mb-4"><i data-lucide="lock" class="w-8 h-8"></i></div>
+            <h2 class="text-xl font-extrabold text-slate-900 dark:text-white">Akses Terkunci</h2>
+            <p class="text-sm text-slate-500 dark:text-slate-400 text-center mt-2 mb-6">Masukkan PIN untuk memantau properti.</p>
+            <input type="password" id="pinInput" placeholder="••••••" class="pin-input w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 focus:border-brand-500 dark:focus:border-brand-500 rounded-xl py-3 px-4 font-extrabold text-slate-800 dark:text-white mb-4" inputmode="numeric" maxlength="6">
+            <button onclick="verifyPin()" class="w-full bg-slate-900 dark:bg-brand-600 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 dark:hover:bg-brand-700 active:scale-95 transition-transform">Buka Dashboard</button>
+            <p id="loginError" class="text-red-500 text-xs font-bold mt-4 hidden">PIN salah.</p>
+            
+            <!-- WATERMARK LOGIN -->
+            <div class="mt-8 flex flex-col items-center gap-3">
+                <p class="text-[10px] text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-widest">
+                    &copy; <span id="currentYearLogin"></span> SolusiLokal.id
+                </p>
+                <a href="https://www.instagram.com/solusilokal.id" target="_blank" class="text-slate-400 hover:text-brand-500 transition-colors" title="Instagram SolusiLokal.id">
+                    <i data-lucide="instagram" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="toast" class="fixed top-4 left-1/2 transform -translate-x-1/2 z-[100] bg-slate-900 dark:bg-brand-600 text-white px-5 py-3 rounded-full shadow-2xl flex items-center gap-3 text-sm font-bold border border-slate-700 dark:border-brand-500">
+        <i data-lucide="info" class="w-4 h-4 text-brand-500 dark:text-white"></i><span id="toastMsg">Notifikasi</span>
+    </div>
+
+    <!-- FLOATING PANDUAN BUTTON (Tampil di semua device, kiri bawah) -->
+    <button onclick="openManual()" class="no-print fixed bottom-6 left-4 sm:left-8 z-50 bg-blue-600 dark:bg-blue-500 text-white w-14 h-14 sm:w-auto sm:px-5 sm:h-12 rounded-full shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 hover:bg-blue-700 active:scale-95 transition-transform border border-blue-400/50" title="Buka Panduan">
+        <i data-lucide="book-open" class="w-6 h-6 sm:w-5 sm:h-5"></i>
+        <span class="hidden sm:block font-bold text-sm">Panduan Sistem</span>
+    </button>
+
+    <!-- FAB CATAT TRANSAKSI (Khusus Mobile, kanan bawah) -->
+    <button onclick="openFinanceForm()" class="sm:hidden no-print fixed bottom-6 right-4 z-50 w-14 h-14 bg-brand-600 dark:bg-brand-500 text-white rounded-full shadow-lg shadow-brand-500/30 flex items-center justify-center active:scale-90 transition-transform border border-brand-400/50">
+        <i data-lucide="plus" class="w-6 h-6"></i>
+    </button>
+
+    <!-- MAIN APP CONTAINER -->
+    <div id="appContainer" class="hidden flex-col min-h-screen">
+        
+        <!-- HEADER APP -->
+        <header class="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-40 no-print transition-colors">
+            <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center h-16">
+                <div class="flex items-center gap-3 cursor-pointer" onclick="openSettings()">
+                    <div class="bg-brand-500 dark:bg-brand-600 p-2.5 rounded-xl text-white shadow-inner"><i data-lucide="hotel" class="w-5 h-5"></i></div>
+                    <div><h1 class="font-bold text-lg leading-tight text-slate-900 dark:text-white" id="displayGhName">GuestHouse<span class="text-brand-500 dark:text-brand-400">OS</span></h1></div>
+                </div>
+                <div class="flex items-center gap-1 sm:gap-2">
+                    <div class="flex bg-slate-100 dark:bg-slate-700 rounded-full p-1">
+                        <button onclick="exportToPDF()" class="px-3 py-1.5 text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-600 rounded-full flex items-center gap-1.5 transition-colors active:scale-95" title="Export PDF"><i data-lucide="file-down" class="w-4 h-4 text-red-500 dark:text-red-400"></i> <span class="hidden sm:inline">Export PDF</span></button>
+                        <button onclick="exportToJPEG()" class="px-3 py-1.5 text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-600 rounded-full flex items-center gap-1.5 transition-colors active:scale-95" title="Simpan Gambar"><i data-lucide="image" class="w-4 h-4 text-blue-500 dark:text-blue-400"></i> <span class="hidden sm:inline">JPEG</span></button>
+                    </div>
+                    <button onclick="openSettings()" class="p-2 text-sm font-bold text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full border border-slate-200 dark:border-slate-600 transition-colors ml-1 active:scale-95"><i data-lucide="settings" class="w-4 h-4"></i></button>
+                    <button onclick="logout()" class="p-2 text-sm font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-full transition-colors ml-1 active:scale-95" title="Kunci Aplikasi"><i data-lucide="power" class="w-4 h-4"></i></button>
+                </div>
+            </div>
+            
+            <div class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700 py-3 px-4 shadow-sm">
+                <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center gap-3 justify-between">
+                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                        <i data-lucide="calendar" class="w-5 h-5 text-slate-400 dark:text-slate-500 shrink-0"></i>
+                        <input type="date" id="dateStart" class="w-full sm:w-auto text-sm border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg p-2 shadow-sm">
+                        <span class="text-slate-400 dark:text-slate-500 text-sm font-bold">s/d</span>
+                        <input type="date" id="dateEnd" class="w-full sm:w-auto text-sm border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg p-2 shadow-sm">
+                    </div>
+                    <button onclick="applyFilter()" class="w-full sm:w-auto px-6 py-2.5 bg-slate-900 dark:bg-brand-600 text-white text-sm font-bold rounded-lg hover:bg-slate-800 dark:hover:bg-brand-700 active:scale-95 transition-all flex justify-center items-center gap-2 shadow-sm"><i data-lucide="search" class="w-4 h-4"></i> Tampilkan</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- AREA EXPORT DOCUMENT -->
+        <div id="exportArea" class="w-full flex-grow">
+            <div class="print-header hidden">
+                <h1 class="text-2xl font-extrabold text-slate-900" id="printGhName">Laporan GuestHouse</h1>
+                <p class="text-sm font-medium text-slate-500 mt-1" id="print-date-range">Periode: - </p>
+                <div class="w-full h-1 bg-brand-500 mt-4 rounded-full"></div>
+            </div>
+
+            <main class="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+                <div class="flex justify-between items-center no-print">
+                    <div>
+                        <h2 class="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white">Dashboard Kinerja</h2>
+                        <p id="currentFilterText" class="text-sm font-semibold text-brand-600 dark:text-brand-400 mt-0.5">Hari Ini</p>
+                    </div>
+                    <button onclick="openFinanceForm()" class="hidden sm:flex text-sm font-bold text-white bg-brand-600 dark:bg-brand-500 px-5 py-2.5 rounded-full shadow flex items-center gap-2 hover:bg-brand-700 dark:hover:bg-brand-600 active:scale-95"><i data-lucide="plus-circle" class="w-4 h-4"></i> Catat Transaksi</button>
+                </div>
+
+                <div id="loader" class="py-10 grid grid-cols-2 lg:grid-cols-4 gap-4 no-print hidden">
+                    <div class="h-32 skeleton rounded-2xl col-span-2"></div><div class="h-32 skeleton rounded-2xl"></div><div class="h-32 skeleton rounded-2xl"></div>
+                </div>
+
+                <div id="dashboardContent" class="space-y-6">
+                    <!-- Metrics Cards -->
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="glass-card rounded-2xl p-5 col-span-2 lg:col-span-1 border-t-4 border-t-brand-500 dark:border-t-brand-400">
+                            <p class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase flex items-center gap-1"><i data-lucide="wallet" class="w-3 h-3"></i> Laba Bersih</p>
+                            <p class="text-3xl font-extrabold text-slate-900 dark:text-white mt-2" id="stat-laba">Rp 0</p>
+                            <div class="flex flex-col gap-1.5 mt-3 text-xs font-semibold border-t border-slate-100 dark:border-slate-700 pt-3">
+                                <div class="flex justify-between"><span class="text-slate-500 dark:text-slate-400">Pemasukan:</span> <span class="text-green-600 dark:text-green-400" id="stat-in">Rp 0</span></div>
+                                <div class="flex justify-between"><span class="text-slate-500 dark:text-slate-400">Pengeluaran:</span> <span class="text-red-500 dark:text-red-400" id="stat-out">Rp 0</span></div>
+                            </div>
+                        </div>
+
+                        <div class="glass-card rounded-2xl p-5 col-span-2 lg:col-span-1 border-t-4 border-t-blue-500 dark:border-t-blue-400">
+                            <p class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase flex items-center gap-1"><i data-lucide="pie-chart" class="w-3 h-3"></i> Rasio Beban Operasional</p>
+                            <p class="text-3xl font-extrabold text-slate-900 dark:text-white mt-2" id="stat-ratio">0%</p>
+                            <div class="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 mt-4"><div class="h-2 rounded-full transition-all" style="width:0%" id="ratio-progress"></div></div>
+                            <p class="text-xs font-bold mt-2 text-slate-900 dark:text-white" id="ratio-insight">Aman</p>
+                        </div>
+
+                        <div class="glass-card rounded-2xl p-5 border-t-4 border-t-purple-500 dark:border-t-purple-400 dark:bg-slate-800/50">
+                            <p class="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase flex items-center gap-1"><i data-lucide="award" class="w-3 h-3"></i> Performa Tim Terbaik</p>
+                            <p class="text-xl font-extrabold text-slate-900 dark:text-white mt-2 truncate" id="stat-topstaff">-</p>
+                            <p class="text-xs font-bold text-slate-500 dark:text-slate-400 mt-1"><span id="stat-toptask" class="text-purple-600 dark:text-purple-400">0</span> Tugas Diselesaikan</p>
+                        </div>
+
+                        <div class="glass-card rounded-2xl p-5 border-t-4 border-t-amber-500 dark:border-t-amber-400 dark:bg-slate-800/50">
+                            <p class="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase flex items-center gap-1"><i data-lucide="alert-triangle" class="w-3 h-3"></i> Pantauan Kamar</p>
+                            <div class="mt-2"><span class="px-2.5 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-lg text-lg font-extrabold border border-amber-200 dark:border-amber-800" id="stat-badroom">-</span></div>
+                            <p class="text-xs font-bold text-slate-500 dark:text-slate-400 mt-2"><span id="stat-badroom-count" class="text-amber-600 dark:text-amber-400">0</span>x Tercatat Isu</p>
+                        </div>
+                    </div>
+
+                    <!-- Lists / Logs Area -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6">
+                        <div class="glass-card rounded-2xl shadow-sm overflow-hidden flex flex-col h-[420px]">
+                            <div class="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/80 flex justify-between items-center"><h2 class="font-extrabold text-sm flex items-center gap-2 dark:text-white"><div class="w-2 h-2 bg-brand-500 rounded-full animate-pulse"></div> Log Transaksi Realtime</h2></div>
+                            <div class="overflow-y-auto p-0 divide-y divide-slate-100 dark:divide-slate-700 flex-1" id="list-finance"></div>
+                        </div>
+                        <div class="flex flex-col gap-6 h-[420px]">
+                            <div class="glass-card rounded-2xl shadow-sm overflow-hidden flex flex-col flex-1">
+                                <div class="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/80"><h2 class="font-extrabold text-sm flex items-center gap-2 dark:text-white"><div class="w-2 h-2 bg-amber-500 rounded-full"></div> Log Komplain / Perawatan</h2></div>
+                                <div class="overflow-y-auto p-0 divide-y divide-slate-100 dark:divide-slate-700 flex-1" id="list-complaints"></div>
+                            </div>
+                            <div class="glass-card rounded-2xl shadow-sm overflow-hidden flex flex-col flex-1">
+                                <div class="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/80"><h2 class="font-extrabold text-sm flex items-center gap-2 dark:text-white"><div class="w-2 h-2 bg-blue-500 rounded-full"></div> Laporan Pekerjaan Staff</h2></div>
+                                <div class="overflow-y-auto p-0 divide-y divide-slate-100 dark:divide-slate-700 flex-1" id="list-tasks"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- WATERMARK / FOOTER (Tampil di semua device) -->
+        <div class="pt-6 pb-8 no-print flex flex-col items-center justify-center gap-3">
+            <p class="text-[10px] sm:text-[11px] text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-widest">
+                &copy; <span id="currentYear"></span> SolusiLokal.id. All Rights Reserved.
+            </p>
+            <a href="https://www.instagram.com/solusilokal.id" target="_blank" class="text-slate-400 hover:text-brand-500 dark:text-slate-500 dark:hover:text-brand-400 transition-colors" title="Instagram SolusiLokal.id">
+                <i data-lucide="instagram" class="w-5 h-5"></i>
+            </a>
+        </div>
+    </div>
+
+    <!-- MODAL PENGATURAN -->
+    <div id="settingsModal" class="modal-bg fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="modal-content bg-white dark:bg-slate-800 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200 dark:border-slate-700">
+            <div class="p-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                <h3 class="font-extrabold text-lg text-slate-900 dark:text-white flex items-center gap-2"><i data-lucide="settings" class="w-5 h-5 text-slate-500 dark:text-slate-400"></i> Pengaturan Properti</h3>
+                <button onclick="closeSettings()" class="p-2 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-full hover:bg-slate-200 dark:hover:bg-slate-600 active:scale-95"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            <div class="p-5 space-y-4 bg-slate-50 dark:bg-slate-800/50">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5">Nama Guest House</label>
+                    <input type="text" id="inputGhName" class="w-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white p-3 rounded-lg focus:border-brand-500" placeholder="Contoh: Villa Anggrek">
+                </div>
+                <div class="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg border border-blue-100 dark:border-blue-800/50 flex gap-3">
+                    <i data-lucide="info" class="w-5 h-5 text-blue-500 dark:text-blue-400 shrink-0"></i>
+                    <p class="text-xs text-blue-800 dark:text-blue-300 leading-relaxed">Pengaturan master data staff dan rekening dilakukan dari Google Sheets Database Anda.</p>
+                </div>
+            </div>
+            <div class="p-4 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800">
+                <button onclick="saveSettings()" class="w-full bg-slate-900 dark:bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-slate-800 dark:hover:bg-brand-700 active:scale-95 transition-transform">Simpan Pengaturan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL EDIT/CRUD WITH AUTO-FORMAT NUMBER -->
+    <div id="editModal" class="modal-bg fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="modal-content bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200 dark:border-slate-700">
+            <div class="p-5 border-b border-slate-100 dark:border-slate-700"><h3 class="font-extrabold text-lg text-slate-900 dark:text-white">Ubah Data Log</h3></div>
+            <div class="p-5 space-y-4">
+                <p class="text-sm text-slate-500 dark:text-slate-400 mb-2">Perbaiki nominal atau keterangan apabila staff salah ketik saat lapor di WA.</p>
+                <input type="text" id="editField1" class="w-full text-sm border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white p-3 rounded-lg focus:border-brand-500 transition-colors">
+                
+                <!-- Input Nominal dengan Titik Ribuan -->
+                <div id="editField2Container" class="relative hidden mt-3">
+                    <span class="absolute left-3 top-3 text-slate-400 font-bold text-sm">Rp</span>
+                    <input type="text" id="editField2" inputmode="numeric" class="w-full text-sm font-bold border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white p-3 pl-9 rounded-lg focus:border-brand-500 transition-colors">
+                </div>
+            </div>
+            <div class="p-4 border-t border-slate-100 dark:border-slate-700 flex gap-2">
+                <button onclick="document.getElementById('editModal').classList.add('hidden')" class="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold py-2.5 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 active:scale-95">Batal</button>
+                <button onclick="saveEdit()" class="flex-1 bg-brand-600 dark:bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-700 dark:hover:bg-brand-600 active:scale-95">Simpan Perubahan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL MANUAL PANDUAN -->
+    <div id="manualModal" class="modal-bg fixed inset-0 z-[130] bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4" onclick="closeManualOutside(event)">
+        <div id="manualModalContent" class="bg-white dark:bg-slate-800 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-200 dark:border-slate-700" onclick="event.stopPropagation()">
+            <div class="p-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center sticky top-0 bg-white dark:bg-slate-800 z-10">
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 p-2 rounded-lg"><i data-lucide="book-open" class="w-5 h-5"></i></div>
+                    <h3 class="font-extrabold text-lg text-slate-900 dark:text-white">SOP & Panduan Sistem</h3>
+                </div>
+                <button onclick="closeManual()" class="p-2 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-full hover:bg-slate-200 dark:hover:bg-slate-600 active:scale-95"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            
+            <div class="p-5 sm:p-6 overflow-y-auto space-y-6 bg-slate-50 dark:bg-slate-900/50">
+                <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                    <h4 class="text-sm font-extrabold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><i data-lucide="git-branch" class="w-4 h-4 text-brand-500"></i> Alur Kerja Otomatis (Autopilot)</h4>
+                    <div class="relative border-l-2 border-slate-200 dark:border-slate-700 ml-3 space-y-6">
+                        <div class="relative pl-6">
+                            <div class="absolute -left-[9px] top-0 w-4 h-4 bg-brand-500 rounded-full border-4 border-white dark:border-slate-800"></div>
+                            <p class="font-bold text-slate-800 dark:text-white text-sm">1. WhatsApp Bot (Tamu & Staff)</p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Sistem kami terhubung ke WhatsApp. Tamu bisa lapor komplain via QR Code kamar, dan Staff melaporkan pekerjaan "Selesai" via WA.</p>
+                        </div>
+                        <div class="relative pl-6">
+                            <div class="absolute -left-[9px] top-0 w-4 h-4 bg-blue-500 rounded-full border-4 border-white dark:border-slate-800"></div>
+                            <p class="font-bold text-slate-800 dark:text-white text-sm">2. Pencatatan Realtime (Google Sheets)</p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Setiap pesan masuk beserta waktu persisnya (jam & menit) direkap otomatis ke dalam database anti-hilang.</p>
+                        </div>
+                        <div class="relative pl-6">
+                            <div class="absolute -left-[9px] top-0 w-4 h-4 bg-purple-500 rounded-full border-4 border-white dark:border-slate-800"></div>
+                            <p class="font-bold text-slate-800 dark:text-white text-sm">3. Laporan Laba-Rugi (Dashboard)</p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Owner dapat memantau uang masuk, keluar, performa staf, dan mengekspor laporan ke PDF untuk investor hanya dengan 1 klik.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 text-center">
+                <button onclick="closeManual()" class="w-full bg-slate-900 dark:bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-slate-800 dark:hover:bg-brand-700 active:scale-95 transition-transform">Saya Mengerti</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT -->
+    <script>
+        // Init Icons
+        lucide.createIcons();
+
+        // KONFIGURASI ENV
+        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyoKg_zTxjnCSw_H5bEsVC1PbbnuCgilcpdKAU-TuvwW0qUkcuTHhvvRiftamubp_6x/exec"; 
+        const GFORM_FINANCE_URL = "https://forms.gle/YOUR_FORM_ID"; // Nanti ganti dengan link Google Form Anda
+        let ACTIVE_PIN = "";
+        let GLOBAL_DATA = null;
+
+        // Initialization & Dynamic Year
+        document.addEventListener('DOMContentLoaded', () => {
+            const currentYear = new Date().getFullYear();
+            if (document.getElementById('currentYear')) document.getElementById('currentYear').textContent = currentYear;
+            if (document.getElementById('currentYearLogin')) document.getElementById('currentYearLogin').textContent = currentYear;
+
+            const savedName = localStorage.getItem('gh_name') || "GuestHouse OS";
+            document.getElementById('displayGhName').innerHTML = savedName.replace(" OS", "<span class='text-brand-500 dark:text-brand-400'>OS</span>");
+            document.getElementById('printGhName').textContent = `Laporan ${savedName}`;
+            
+            const savedPin = localStorage.getItem('guesthouse_pin');
+            if (savedPin) { ACTIVE_PIN = savedPin; unlockDashboard(); } 
+            else { document.getElementById('pinInput').focus(); }
+        });
+
+        // AUTO FORMAT RUPIAH PADA INPUT EDIT
+        document.getElementById('editField2').addEventListener('input', function(e) {
+            let value = this.value.replace(/\D/g, ''); // Hapus non-digit
+            if(value) {
+                this.value = parseInt(value, 10).toLocaleString('id-ID'); // Format dengan titik
+            } else {
+                this.value = '';
+            }
+        });
+
+        // Settings / Manual / Form functions
+        function openSettings() { document.getElementById('inputGhName').value = localStorage.getItem('gh_name') || "GuestHouse OS"; document.getElementById('settingsModal').classList.remove('hidden'); }
+        function closeSettings() { document.getElementById('settingsModal').classList.add('hidden'); }
+        function saveSettings() {
+            const newName = document.getElementById('inputGhName').value;
+            localStorage.setItem('gh_name', newName);
+            document.getElementById('displayGhName').innerHTML = newName.replace(" OS", "<span class='text-brand-500 dark:text-brand-400'>OS</span>");
+            document.getElementById('printGhName').textContent = `Laporan ${newName}`;
+            closeSettings(); showToast("Pengaturan disimpan.");
+        }
+        function openManual() { document.getElementById('manualModal').classList.remove('hidden'); }
+        function closeManual() { document.getElementById('manualModal').classList.add('hidden'); }
+        function closeManualOutside(e) { if (e.target.id === 'manualModal') closeManual(); }
+        function openFinanceForm() { window.open(GFORM_FINANCE_URL, "_blank"); }
+        function applyFilter() { fetchData(); }
+
+        // Login System
+        document.getElementById('pinInput').addEventListener('keypress', e => { if (e.key === 'Enter') verifyPin(); });
+        async function verifyPin() {
+            const inputPin = document.getElementById('pinInput').value;
+            if (inputPin.length < 4) return;
+            ACTIVE_PIN = inputPin; localStorage.setItem('guesthouse_pin', ACTIVE_PIN);
+            unlockDashboard();
+        }
+        function unlockDashboard() {
+            const loginScreen = document.getElementById('loginScreen');
+            loginScreen.classList.add('fade-out');
+            setTimeout(() => {
+                loginScreen.classList.add('hidden'); 
+                document.getElementById('appContainer').classList.remove('hidden'); 
+                document.getElementById('appContainer').classList.add('flex');
+                
+                const today = new Date(); const pastMonth = new Date(today); pastMonth.setDate(today.getDate() - 30);
+                document.getElementById('dateStart').value = pastMonth.toISOString().split('T')[0];
+                document.getElementById('dateEnd').value = today.toISOString().split('T')[0];
+                fetchData();
+            }, 300);
+        }
+        function logout() { localStorage.removeItem('guesthouse_pin'); location.reload(); }
+
+        // Utilities
+        const formatIDR = (num) => new Intl.NumberFormat('id-ID', { notation: "compact", maximumFractionDigits: 1 }).format(num);
+        const formatRupiahFull = (num) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num);
+        function showToast(msg) { const t = document.getElementById('toast'); document.getElementById('toastMsg').textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
+
+        // EXPORT TO PDF & JPEG
+        window.jsPDF = window.jspdf.jsPDF;
+
+        function exportToPDF() {
+            showToast("Memproses Dokumen PDF...");
+            const exportArea = document.getElementById('exportArea');
+            exportArea.classList.add('exporting'); 
+            
+            setTimeout(() => {
+                html2canvas(exportArea, { scale: 2, backgroundColor: "#ffffff", useCORS: true }).then(canvas => {
+                    const imgData = canvas.toDataURL('image/jpeg', 1.0);
+                    const pdf = new jsPDF('p', 'mm', 'a4');
+                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+                    
+                    pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+                    const fileName = `Laporan_GuestHouse_${new Date().toISOString().split('T')[0]}.pdf`;
+                    pdf.save(fileName);
+                    
+                    exportArea.classList.remove('exporting');
+                    showToast("Laporan PDF berhasil diunduh.");
+                });
+            }, 800);
+        }
+
+        function exportToJPEG() {
+            showToast("Menyimpan Gambar...");
+            const exportArea = document.getElementById('exportArea');
+            exportArea.classList.add('exporting');
+            
+            setTimeout(() => {
+                html2canvas(exportArea, { scale: 2, backgroundColor: "#ffffff", useCORS: true }).then(canvas => {
+                    const link = document.createElement('a');
+                    link.download = `Infografis_GuestHouse_${new Date().toISOString().split('T')[0]}.jpeg`;
+                    link.href = canvas.toDataURL("image/jpeg", 0.9);
+                    link.click();
+                    exportArea.classList.remove('exporting');
+                    showToast("Gambar tersimpan.");
+                });
+            }, 800);
+        }
+
+        // MOCK DATA GENERATOR
+        function randomTime(startHour, endHour) {
+            const h = Math.floor(Math.random() * (endHour - startHour + 1)) + startHour;
+            const m = Math.floor(Math.random() * 60);
+            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+        }
+
+        function generateMockData(startDateStr, endDateStr) {
+            let mockFinance = [], mockTasks = [], mockComplaints = [];
+            let totalIn = 0, totalOut = 0, openC = 0;
+            const staffList = ["Agus", "Budi", "Siti"]; const rooms = ["101", "102", "103", "104", "105"];
+            
+            for(let i=0; i < 30; i++) {
+                let d = new Date(startDateStr); d.setDate(d.getDate() + i); let dateStr = d.toISOString().split('T')[0];
+                
+                let isIncome = Math.random() > 0.35; 
+                let amt = isIncome ? [450000, 600000, 1200000][Math.floor(Math.random()*3)] : [100000, 250000, 50000][Math.floor(Math.random()*3)];
+                if(isIncome) totalIn+=amt; else totalOut+=amt;
+                mockFinance.push({ id: `F${i}`, tipe: isIncome?"Pemasukan":"Pengeluaran", jumlah: amt, keterangan: isIncome?"Sewa Kamar via Transfer":"Biaya Operasional", tanggal: dateStr, jam: randomTime(10, 19), staff: isIncome ? "Owner" : staffList[Math.floor(Math.random()*3)] });
+                
+                mockTasks.push({ id: `T${i}`, tanggal: dateStr, staff: staffList[Math.floor(Math.random()*3)], tugas: `Pembersihan kamar & linen`, status: "Selesai", jam: randomTime(8, 14) });
+                
+                if(Math.random() > 0.5) { 
+                    let isMasihOpen = (i > 27 && Math.random() > 0.5); 
+                    let probs = ["AC kurang dingin / Filter kotor", "Gagang pintu macet / Perawatan rutin", "TV kabel tidak ada sinyal", "Pipa air pemanas tersumbat"];
+                    mockComplaints.push({ id: `C${i}`, tanggal: dateStr, jam: randomTime(15, 22), kamar: rooms[Math.floor(Math.random()*5)], masalah: probs[Math.floor(Math.random()*4)], status: isMasihOpen ? "Open" : "Selesai" });
+                }
+            }
+            
+            let roomP = {};
+            mockComplaints.forEach(c => { if(c.status === "Open") openC++; roomP[c.kamar] = (roomP[c.kamar]||0)+1; });
+            let topRoom = Object.keys(roomP).length > 0 ? Object.keys(roomP).reduce((a, b) => roomP[a] > roomP[b] ? a : b) : "N/A";
+
+            return {
+                summary: { pendapatan: totalIn, pengeluaran: totalOut, laba: totalIn-totalOut, taskSelesai: 30, taskTotal: 30, komplainOpen: openC },
+                insights: { topStaff: "Budi", topStaffTasks: 14, problemRoom: topRoom, problemRoomCount: roomP[topRoom] || 0 },
+                lists: { finance: mockFinance.reverse(), tasks: mockTasks.reverse(), complaints: mockComplaints.reverse() }
+            };
+        }
+
+        async function fetchData() {
+            document.getElementById('loader').classList.remove('hidden'); 
+            document.getElementById('dashboardContent').classList.add('hidden');
+            
+            const start = document.getElementById('dateStart').value; const end = document.getElementById('dateEnd').value;
+            document.getElementById('currentFilterText').textContent = `${start} s/d ${end}`;
+            document.getElementById('print-date-range').textContent = `Periode: ${start} s/d ${end}`;
+            
+            setTimeout(() => {
+                GLOBAL_DATA = generateMockData(start, end); 
+                renderDashboard();
+                document.getElementById('loader').classList.add('hidden'); 
+                document.getElementById('dashboardContent').classList.remove('hidden');
+            }, 800);
+        }
+
+        // CRUD
+        let currentEditItem = null;
+
+        function deleteItem(listType, id) {
+            if(confirm("Hapus data secara permanen dari Log?")) {
+                GLOBAL_DATA.lists[listType] = GLOBAL_DATA.lists[listType].filter(item => item.id !== id);
+                recalculateSummary(); renderDashboard(); showToast("Log berhasil dihapus.");
+            }
+        }
+
+        function editItem(listType, id) {
+            currentEditItem = { type: listType, id: id };
+            const item = GLOBAL_DATA.lists[listType].find(i => i.id === id);
+            
+            document.getElementById('editField1').value = item.keterangan || item.tugas || item.masalah;
+            if(listType === 'finance') {
+                document.getElementById('editField2Container').classList.remove('hidden');
+                // Set initial value formatted with dots
+                document.getElementById('editField2').value = Number(item.jumlah).toLocaleString('id-ID');
+            } else { 
+                document.getElementById('editField2Container').classList.add('hidden'); 
+            }
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        function saveEdit() {
+            const v1 = document.getElementById('editField1').value; 
+            // Ambil value tanpa titik, lalu konversi ke Number
+            const v2Raw = document.getElementById('editField2').value.replace(/\D/g, '');
+            const v2 = parseInt(v2Raw, 10) || 0;
+            
+            const item = GLOBAL_DATA.lists[currentEditItem.type].find(i => i.id === currentEditItem.id);
+            if(currentEditItem.type === 'finance') { item.keterangan = v1; item.jumlah = v2; }
+            else if(currentEditItem.type === 'tasks') { item.tugas = v1; }
+            else if(currentEditItem.type === 'complaints') { item.masalah = v1; }
+            
+            document.getElementById('editModal').classList.add('hidden');
+            recalculateSummary(); renderDashboard(); showToast("Perubahan tersimpan.");
+        }
+
+        function recalculateSummary() {
+            let tin = 0, tout = 0, openc = 0;
+            GLOBAL_DATA.lists.finance.forEach(f => { if(f.tipe==='Pemasukan') tin+=f.jumlah; else tout+=f.jumlah; });
+            GLOBAL_DATA.lists.complaints.forEach(c => { if(c.status==='Open') openc++; });
+            GLOBAL_DATA.summary.pendapatan = tin; GLOBAL_DATA.summary.pengeluaran = tout; 
+            GLOBAL_DATA.summary.laba = tin-tout; GLOBAL_DATA.summary.komplainOpen = openc;
+        }
+
+        // RENDER DOM
+        function renderDashboard() {
+            const data = GLOBAL_DATA;
+            document.getElementById('stat-laba').textContent = formatRupiahFull(data.summary.laba);
+            document.getElementById('stat-in').textContent = formatIDR(data.summary.pendapatan);
+            document.getElementById('stat-out').textContent = formatIDR(data.summary.pengeluaran);
+            
+            let p = data.summary.pendapatan; let k = data.summary.pengeluaran;
+            let ratio = p>0 ? (k/p)*100 : (k>0?100:0);
+            document.getElementById('stat-ratio').textContent = `${ratio.toFixed(1)}%`;
+            document.getElementById('ratio-progress').style.width = `${Math.min(ratio,100)}%`;
+            
+            const rInsight = document.getElementById('ratio-insight');
+            if (p===0 && k===0) { rInsight.textContent="Belum ada data"; rInsight.className="text-xs font-bold mt-2 text-slate-500 dark:text-slate-400";}
+            else if (ratio <= 35) { rInsight.textContent="Sangat Sehat"; rInsight.className="text-xs font-bold mt-2 text-brand-600 dark:text-brand-400";}
+            else if (ratio <= 55) { rInsight.textContent="Wajar Operasional"; rInsight.className="text-xs font-bold mt-2 text-amber-600 dark:text-amber-400";}
+            else { rInsight.textContent="Waspada: Beban Tinggi!"; rInsight.className="text-xs font-bold mt-2 text-red-600 dark:text-red-400";}
+
+            document.getElementById('stat-topstaff').textContent = data.insights.topStaff;
+            document.getElementById('stat-toptask').textContent = data.insights.topStaffTasks;
+            
+            const statBadRoom = document.getElementById('stat-badroom');
+            statBadRoom.textContent = data.insights.problemRoom;
+            if(data.summary.komplainOpen > 0) {
+                statBadRoom.classList.replace('bg-amber-100', 'bg-red-100'); statBadRoom.classList.replace('dark:bg-amber-900/30', 'dark:bg-red-900/30');
+                statBadRoom.classList.replace('text-amber-700', 'text-red-700'); statBadRoom.classList.replace('dark:text-amber-400', 'dark:text-red-400');
+                statBadRoom.classList.replace('border-amber-200', 'border-red-200'); statBadRoom.classList.replace('dark:border-amber-800', 'dark:border-red-800');
+            } else {
+                statBadRoom.className = "px-2.5 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-lg text-lg font-extrabold border border-amber-200 dark:border-amber-800";
+            }
+            document.getElementById('stat-badroom-count').textContent = data.insights.problemRoomCount;
+
+            document.getElementById('list-finance').innerHTML = data.lists.finance.map(f => `
+                <div class="p-3 sm:p-4 flex justify-between items-center hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors group border-b border-slate-50 dark:border-slate-800/50">
+                    <div class="flex-1">
+                        <p class="font-bold text-slate-800 dark:text-white text-sm flex flex-wrap items-center gap-2">
+                            ${f.keterangan} 
+                            <span class="bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded text-[10px] font-bold"><i data-lucide="clock" class="w-3 h-3 inline"></i> ${f.jam}</span>
+                        </p>
+                        <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-1">${f.tanggal} • Input: ${f.staff}</p>
+                    </div>
+                    <div class="text-right font-extrabold ${f.tipe === 'Pemasukan' ? 'text-green-600 dark:text-green-400' : 'text-slate-800 dark:text-slate-300'} mr-4">
+                        ${f.tipe === 'Pemasukan' ? '+' : '-'}${formatRupiahFull(f.jumlah)}
+                    </div>
+                    <div class="action-buttons flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                        <button onclick="editItem('finance', '${f.id}')" class="p-1.5 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded" title="Edit"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                        <button onclick="deleteItem('finance', '${f.id}')" class="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded" title="Hapus"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                </div>`).join('');
+
+            document.getElementById('list-complaints').innerHTML = data.lists.complaints.map(c => `
+                <div class="p-3 sm:p-4 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors group border-b border-slate-50 dark:border-slate-800/50">
+                    <div class="w-10 h-10 shrink-0 rounded flex items-center justify-center font-extrabold text-xs ${c.status === 'Open' ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/50' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700'}">${c.kamar}</div>
+                    <div class="flex-1">
+                        <p class="text-sm font-bold text-slate-800 dark:text-white leading-tight">${c.masalah}</p>
+                        <div class="flex gap-2 mt-1.5 items-center flex-wrap">
+                            <span class="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded ${c.status === 'Open' ? 'bg-red-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'}">${c.status === 'Open' ? 'Bermasalah' : 'Tuntas'}</span>
+                            <span class="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1"><i data-lucide="clock" class="w-3 h-3"></i> ${c.tanggal} - ${c.jam}</span>
+                        </div>
+                    </div>
+                    <div class="action-buttons flex flex-col sm:flex-row gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                        <button onclick="editItem('complaints', '${c.id}')" class="p-1.5 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded" title="Edit"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                        <button onclick="deleteItem('complaints', '${c.id}')" class="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded" title="Hapus"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                </div>`).join('');
+
+            document.getElementById('list-tasks').innerHTML = data.lists.tasks.map(t => `
+                <div class="p-3 sm:p-4 flex items-start gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors group border-b border-slate-50 dark:border-slate-800/50">
+                    <div class="mt-0.5">${t.status === 'Selesai' ? '<i data-lucide="check-circle-2" class="w-4 h-4 text-blue-500"></i>' : '<div class="w-3 h-3 rounded-full border-2 border-slate-300 dark:border-slate-600"></div>'}</div>
+                    <div class="flex-1">
+                        <p class="text-sm font-bold text-slate-800 dark:text-white ${t.status === 'Selesai' ? 'text-slate-500 dark:text-slate-400 line-through' : ''}">${t.tugas}</p>
+                        <div class="flex flex-wrap items-center gap-2 mt-1">
+                            <span class="text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded"><i data-lucide="user" class="w-3 h-3 inline"></i> ${t.staff}</span>
+                            <span class="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1"><i data-lucide="message-circle" class="w-3 h-3"></i> Lapor WA pkl ${t.jam}</span>
+                        </div>
+                    </div>
+                    <div class="action-buttons flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                        <button onclick="editItem('tasks', '${t.id}')" class="p-1.5 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded" title="Edit"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                        <button onclick="deleteItem('tasks', '${t.id}')" class="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded" title="Hapus"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                </div>`).join('');
+            
+            lucide.createIcons();
+        }
+    </script>
+</body>
+</html>
